@@ -126,7 +126,7 @@ def dashboard():
         recent_reviews = query.order_by(Feedback.created_at.desc()).limit(5).all()
         all_feedback = query.all()
 
-        # Count based on sentiment_class, handling lowercase and the DB spelling
+        # Analytics remains tied to sentiment for the pie chart
         chart_data = {
             'Positive': sum(1 for f in all_feedback if f.sentiment_class and f.sentiment_class.lower() == 'positive'),
             'Mildly Negative': sum(
@@ -135,24 +135,33 @@ def dashboard():
                                      f.sentiment_class and f.sentiment_class.lower() in ['severely negative',
                                                                                          'severly negative'])
         }
-        queue_stats = chart_data
+
+        # Queues are now strictly tied to the routing_queue field and exclude resolved items
+        queue_stats = {
+            'Ready to Publish': sum(
+                1 for f in all_feedback if f.routing_queue == 'Ready to Publish' and not f.is_resolved),
+            'Private Queue': sum(1 for f in all_feedback if f.routing_queue == 'Private Queue' and not f.is_resolved),
+            'Escalate to Manager': sum(
+                1 for f in all_feedback if f.routing_queue == 'Escalate to Manager' and not f.is_resolved),
+            'Human Intervention': sum(
+                1 for f in all_feedback if f.routing_queue == 'Human Intervention' and not f.is_resolved)
+        }
 
         return render_template('dashboard.html', tab=tab, recent_reviews=recent_reviews,
                                chart_data=chart_data, queue_stats=queue_stats,
-                               locations=locations, selected_loc=selected_loc, location_name=location_name, pusher_key=os.environ.get('PUSHER_KEY'), pusher_cluster=os.environ.get('PUSHER_CLUSTER'))
+                               locations=locations, selected_loc=selected_loc, location_name=location_name)
 
     else:
-        # Load specific queue by sentiment_class
-        if tab == 'positive':
-            target_classes = ['positive']
-        elif tab == 'mildly_negative':
-            target_classes = ['mildly negative']
-        elif tab == 'severely_negative':
-            target_classes = ['severely negative', 'severly negative']
-        else:
-            target_classes = []
+        # Map the URL tab parameter to the exact n8n database strings
+        queue_mapping = {
+            'ready_to_publish': 'Ready to Publish',
+            'private_queue': 'Private Queue',
+            'escalated': 'Escalate to Manager',
+            'human_intervention': 'Human Intervention'
+        }
+        target_queue = queue_mapping.get(tab)
 
-        feedbacks = query.filter(Feedback.sentiment_class.in_(target_classes), Feedback.is_resolved == False).all()
+        feedbacks = query.filter(Feedback.routing_queue == target_queue, Feedback.is_resolved == False).all()
         return render_template('dashboard.html', tab=tab, feedbacks=feedbacks,
                                locations=locations, selected_loc=selected_loc, location_name=location_name)
 
@@ -172,8 +181,8 @@ def change_queue(feedback_id):
     feedback = db.session.get(Feedback, feedback_id)
     new_queue = request.form.get('new_queue')
     if feedback and new_queue:
-        # Updates the sentiment_class to visually move it to the correct tab
-        feedback.sentiment_class = new_queue.lower()
+        # now updates the routing_queue
+        feedback.routing_queue = new_queue
         db.session.commit()
     return redirect(request.referrer)
 

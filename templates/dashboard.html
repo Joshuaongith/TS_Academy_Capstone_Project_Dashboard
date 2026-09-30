@@ -30,9 +30,10 @@
     {% endif %}
 
     <a href="{{ url_for('dashboard', tab='home', location=selected_loc) }}" class="sidebar-link {% if tab == 'home' %}active{% endif %}">Home Overview</a>
-    <a href="{{ url_for('dashboard', tab='positive', location=selected_loc) }}" class="sidebar-link {% if tab == 'positive' %}active{% endif %}">Positive Queue</a>
-    <a href="{{ url_for('dashboard', tab='mildly_negative', location=selected_loc) }}" class="sidebar-link {% if tab == 'mildly_negative' %}active{% endif %}">Mildly Negative</a>
-    <a href="{{ url_for('dashboard', tab='severely_negative', location=selected_loc) }}" class="sidebar-link {% if tab == 'severely_negative' %}active{% endif %}">Severely Negative</a>
+    <a href="{{ url_for('dashboard', tab='ready_to_publish', location=selected_loc) }}" class="sidebar-link {% if tab == 'ready_to_publish' %}active{% endif %}">Ready to Publish</a>
+    <a href="{{ url_for('dashboard', tab='private_queue', location=selected_loc) }}" class="sidebar-link {% if tab == 'private_queue' %}active{% endif %}">Private Queue</a>
+    <a href="{{ url_for('dashboard', tab='escalated', location=selected_loc) }}" class="sidebar-link {% if tab == 'escalated' %}active{% endif %}">Escalate to Manager</a>
+    <a href="{{ url_for('dashboard', tab='human_intervention', location=selected_loc) }}" class="sidebar-link {% if tab == 'human_intervention' %}active{% endif %}">Human Intervention</a>
 </aside>
 
 <main class="main-content">
@@ -54,21 +55,19 @@
         {% if tab == 'home' %}
         <div class="home-grid">
 
-            <!-- Square 1: Recent Reviews -->
-            <!-- Square 1: Recent Reviews -->
+           <!-- Square 1: Recent Reviews -->
             <div class="grid-card">
                 <h3>Recent Reviews</h3>
                 <ul class="review-list">
                 {% for review in recent_reviews %}
-                    <!-- Dynamically determine the URL tab based on the sentiment class -->
-                    {% set rev_tab = 'positive' if review.sentiment_class|lower == 'positive' else ('mildly_negative' if review.sentiment_class|lower == 'mildly negative' else 'severely_negative') %}
+                    {% set rev_tab = 'ready_to_publish' if review.routing_queue == 'Ready to Publish' else ('private_queue' if review.routing_queue == 'Private Queue' else ('escalated' if review.routing_queue == 'Escalate to Manager' else 'human_intervention')) %}
 
                     <a href="{{ url_for('dashboard', tab=rev_tab, location=selected_loc) }}" style="text-decoration: none; display: block; color: inherit;">
                         <li class="review-item">
                             <div style="font-weight: bold; margin-bottom: 5px; color: #0f172a;">{{ review.job.customer.name }}</div>
                             <div style="color: #475569; margin-bottom: 8px; line-height: 1.4;">"{{ review.raw_text[:80] }}..."</div>
                             <small style="color: #64748b; font-weight: 500;">
-                                Queue: <span style="color: #0f172a;">{{ review.sentiment_class|title }}</span>
+                                Queue: <span style="color: #0f172a;">{{ review.routing_queue }}</span>
                             </small>
                         </li>
                     </a>
@@ -88,21 +87,22 @@
             <!-- Square 3: Queue Statistics -->
             <div class="grid-card">
                 <h3>Queue Volume ({{ location_name }})</h3>
-                <p><b>Positive:</b> {{ queue_stats.get('Positive', 0) }}</p>
-                <p><b>Mildly Negative:</b> {{ queue_stats.get('Mildly Negative', 0) }}</p>
-                <p><b>Severely Negative:</b> {{ queue_stats.get('Severely Negative', 0) }}</p>
+                <p><b>Ready to Publish:</b> {{ queue_stats.get('Ready to Publish', 0) }}</p>
+                <p><b>Private Queue:</b> {{ queue_stats.get('Private Queue', 0) }}</p>
+                <p><b>Escalate to Manager:</b> {{ queue_stats.get('Escalate to Manager', 0) }}</p>
+                <p><b>Human Intervention:</b> {{ queue_stats.get('Human Intervention', 0) }}</p>
             </div>
 
             <!-- Square 4: Quick Navigation -->
             <div class="grid-card">
                 <h3>Manage Queues</h3>
                 <div class="queue-nav-buttons">
-                    <a href="{{ url_for('dashboard', tab='positive', location=selected_loc) }}" class="queue-btn positive">Positive Feedback</a>
-                    <a href="{{ url_for('dashboard', tab='mildly_negative', location=selected_loc) }}" class="queue-btn mildly">Mildly Negative</a>
-                    <a href="{{ url_for('dashboard', tab='severely_negative', location=selected_loc) }}" class="queue-btn severely">Severely Negative</a>
+                    <a href="{{ url_for('dashboard', tab='ready_to_publish', location=selected_loc) }}" class="queue-btn" style="background: #22c55e;">Ready to Publish</a>
+                    <a href="{{ url_for('dashboard', tab='private_queue', location=selected_loc) }}" class="queue-btn" style="background: #f59e0b;">Private Queue</a>
+                    <a href="{{ url_for('dashboard', tab='escalated', location=selected_loc) }}" class="queue-btn" style="background: #ef4444;">Escalate to Manager</a>
+                    <a href="{{ url_for('dashboard', tab='human_intervention', location=selected_loc) }}" class="queue-btn" style="background: #64748b;">Human Intervention</a>
                 </div>
             </div>
-
         </div>
 
         <script>
@@ -131,7 +131,6 @@
 
         {% else %}
         <!-- Table View for Specific Queues -->
-        <!-- Table View for Specific Queues -->
         <table>
             <tr class="table-header">
                 <th>Customer</th>
@@ -148,9 +147,16 @@
                     <small style="color: #64748b;">{{ item.job.customer.email }}</small><br>
                     <small style="color: #0f172a; font-weight: 500;">{{ item.job.location.branch_name }}</small>
                 </td>
-
                 <td data-label="Original Feedback" style="line-height: 1.4; color: #334155;">
                     {{ item.raw_text }}
+
+                    <!-- Dynamic Visual Sentiment Badge -->
+                    <div style="margin-top: 10px;">
+                        {% set badge_color = '#22c55e' if item.sentiment_class|lower == 'positive' else ('#f59e0b' if item.sentiment_class|lower == 'mildly negative' else ('#ef4444' if 'sever' in item.sentiment_class|lower else '#64748b')) %}
+                        <span style="display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: bold; color: white; background-color: {{ badge_color }};">
+                            Detected: {{ item.sentiment_class|title }}
+                        </span>
+                    </div>
                 </td>
 
                 <td data-label="AI Suggested Response">
@@ -172,9 +178,10 @@
                         <form method="POST" action="{{ url_for('change_queue', feedback_id=item.id) }}" onsubmit="return confirm('Are you sure you want to move this to a different queue?');">
                             <select name="new_queue" onchange="this.form.submit()" style="width:100%; padding: 6px; border: 1px solid #cbd5e1; border-radius: 4px;">
                                 <option value="">Move to...</option>
-                                <option value="Positive">Positive</option>
-                                <option value="Mildly Negative">Mildly Negative</option>
-                                <option value="Severely Negative">Severely Negative</option>
+                                <option value="Ready to Publish">Ready to Publish</option>
+                                <option value="Private Queue">Private Queue</option>
+                                <option value="Escalate to Manager">Escalate to Manager</option>
+                                <option value="Human Intervention">Human Intervention</option>
                             </select>
                         </form>
                         <form method="POST" action="{{ url_for('resolve_feedback', feedback_id=item.id) }}" onsubmit="return confirm('Mark this feedback as completely resolved?');">
