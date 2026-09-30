@@ -1,5 +1,6 @@
 import os
-from flask import Flask, render_template, request, redirect, url_for, flash
+import pusher
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -13,18 +14,24 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URI')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'pool_pre_ping': True}
 
-
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
+# --- Pusher Initialization ---
+pusher_client = pusher.Pusher(
+    app_id=os.environ.get('PUSHER_APP_ID'),
+    key=os.environ.get('PUSHER_KEY'),
+    secret=os.environ.get('PUSHER_SECRET'),
+    cluster=os.environ.get('PUSHER_CLUSTER'),
+    ssl=True
+)
 
 # --- Database Models ---
 class Location(db.Model):
     __tablename__ = 'locations'
     id = db.Column(db.Uuid, primary_key=True)
     branch_name = db.Column(db.String)
-
 
 class Customer(db.Model):
     __tablename__ = 'customers'
@@ -34,7 +41,6 @@ class Customer(db.Model):
     negative_feedback_count = db.Column(db.Integer, server_default=db.text('0'))
     created_at = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
 
-
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Uuid, primary_key=True, server_default=db.text('gen_random_uuid()'))
@@ -43,7 +49,6 @@ class User(UserMixin, db.Model):
     role = db.Column(db.String(50), nullable=False, default='staff')
     location_id = db.Column(db.Uuid, db.ForeignKey('locations.id'), nullable=True)
     location = db.relationship('Location')
-
 
 class Job(db.Model):
     __tablename__ = 'jobs'
@@ -57,10 +62,8 @@ class Job(db.Model):
     location = db.relationship('Location')
     customer = db.relationship('Customer', lazy='joined')
 
-
 class Feedback(db.Model):
     __tablename__ = 'feedback'
-    # Changed from Integer to Uuid to match your database schema
     id = db.Column(db.Uuid, primary_key=True, server_default=db.text('gen_random_uuid()'))
     job_id = db.Column(db.Uuid, db.ForeignKey('jobs.id'))
     raw_text = db.Column(db.Text)
@@ -68,8 +71,6 @@ class Feedback(db.Model):
     sentiment_score = db.Column(db.Numeric, nullable=False)
     routing_queue = db.Column(db.String(50), nullable=False)
     ai_draft_response = db.Column(db.Text)
-
-    # Added confidence score from your database
     confidence_score = db.Column(db.Integer)
     is_resolved = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
@@ -92,13 +93,11 @@ def login():
         flash('Invalid email or password')
     return render_template('login.html')
 
-
 @app.route('/logout')
 @login_required
 def logout():
     logout_user()
     return redirect(url_for('login'))
-
 
 @app.route('/')
 @login_required
@@ -129,28 +128,21 @@ def dashboard():
         # Analytics remains tied to sentiment for the pie chart
         chart_data = {
             'Positive': sum(1 for f in all_feedback if f.sentiment_class and f.sentiment_class.lower() == 'positive'),
-            'Mildly Negative': sum(
-                1 for f in all_feedback if f.sentiment_class and f.sentiment_class.lower() == 'mildly negative'),
-            'Severely Negative': sum(1 for f in all_feedback if
-                                     f.sentiment_class and f.sentiment_class.lower() in ['severely negative',
-                                                                                         'severly negative'])
+            'Mildly Negative': sum(1 for f in all_feedback if f.sentiment_class and f.sentiment_class.lower() == 'mildly negative'),
+            'Severely Negative': sum(1 for f in all_feedback if f.sentiment_class and f.sentiment_class.lower() in ['severely negative', 'severly negative'])
         }
 
         # Queues are now strictly tied to the routing_queue field and exclude resolved items
         queue_stats = {
-            'Ready to Publish': sum(
-                1 for f in all_feedback if f.routing_queue == 'Ready to Publish' and not f.is_resolved),
+            'Ready to Publish': sum(1 for f in all_feedback if f.routing_queue == 'Ready to Publish' and not f.is_resolved),
             'Private Queue': sum(1 for f in all_feedback if f.routing_queue == 'Private Queue' and not f.is_resolved),
-            'Escalate to Manager': sum(
-                1 for f in all_feedback if f.routing_queue == 'Escalate to Manager' and not f.is_resolved),
-            'Human Intervention': sum(
-                1 for f in all_feedback if f.routing_queue == 'Human Intervention' and not f.is_resolved)
+            'Escalate to Manager': sum(1 for f in all_feedback if f.routing_queue == 'Escalate to Manager' and not f.is_resolved),
+            'Human Intervention': sum(1 for f in all_feedback if f.routing_queue == 'Human Intervention' and not f.is_resolved)
         }
 
         return render_template('dashboard.html', tab=tab, recent_reviews=recent_reviews,
                                chart_data=chart_data, queue_stats=queue_stats,
                                locations=locations, selected_loc=selected_loc, location_name=location_name)
-
     else:
         # Map the URL tab parameter to the exact n8n database strings
         queue_mapping = {
@@ -164,7 +156,6 @@ def dashboard():
         feedbacks = query.filter(Feedback.routing_queue == target_queue, Feedback.is_resolved == False).all()
         return render_template('dashboard.html', tab=tab, feedbacks=feedbacks,
                                locations=locations, selected_loc=selected_loc, location_name=location_name)
-
 
 @app.route('/action/resolve/<uuid:feedback_id>', methods=['POST'])
 @login_required
@@ -185,7 +176,6 @@ def change_queue(feedback_id):
         feedback.routing_queue = new_queue
         db.session.commit()
     return redirect(request.referrer)
-
 
 @app.route('/admin', methods=['GET', 'POST'])
 @login_required
@@ -211,7 +201,6 @@ def admin():
     locations = Location.query.all()
     return render_template('admin.html', users=users, locations=locations)
 
-
 @app.route('/admin/toggle_role/<uuid:user_id>', methods=['POST'])
 @login_required
 def toggle_role(user_id):
@@ -223,7 +212,6 @@ def toggle_role(user_id):
         db.session.commit()
     return redirect(url_for('admin'))
 
-
 @app.route('/admin/delete/<uuid:user_id>', methods=['POST'])
 @login_required
 def delete_user(user_id):
@@ -234,3 +222,13 @@ def delete_user(user_id):
         db.session.delete(user)
         db.session.commit()
     return redirect(url_for('admin'))
+
+@app.route('/api/webhook/notify', methods=['POST'])
+def notify_dashboard():
+    # 1. Authorise using the specific header name set in n8n (x-key)
+    if request.headers.get('x-key') != os.environ.get('WEBHOOK_SECRET'):
+        return jsonify({"error": "Unauthorised access"}), 401
+
+    # 2. Trigger the Pusher event
+    pusher_client.trigger('dashboard-channel', 'data-updated', {'action': 'refresh'})
+    return jsonify({"status": "notification sent"}), 200
