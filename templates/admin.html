@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Terminal</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}">
+</head>
+<body>
+
+<main class="main-content" style="height: 100vh;">
+    <nav class="top-navbar">
+        <h2>User Management Terminal</h2>
+        <div class="nav-actions">
+            <a href="{{ url_for('dashboard') }}" class="btn" style="background:#e2e8f0; color:#0f172a;">Back to Dashboard</a>
+        </div>
+    </nav>
+
+    <div class="content-area">
+        <table>
+            <!-- Added table-header class to hide on mobile -->
+            <tr class="table-header">
+                <th>Email</th>
+                <th>Role</th>
+                <th>Branch Assignment</th>
+                <th>Access Controls</th>
+            </tr>
+            {% for user in users %}
+            <tr>
+                <!-- Added data-label attributes to every td -->
+                <td data-label="Email">{{ user.email }}</td>
+                <td data-label="Role">
+                    <span style="font-weight:bold; color: {% if user.role == 'super_admin' %}#991b1b{% else %}#0f172a{% endif %}">
+                        {{ user.role|title }}
+                    </span>
+                </td>
+                <td data-label="Branch Assignment">{{ user.location.branch_name if user.location else 'Global Access' }}</td>
+                <td data-label="Access Controls">
+                    {% if user.role != 'super_admin' %}
+                    <div style="display: flex; gap: 10px;">
+                        <!-- Dynamic Promote/Demote -->
+                        <form method="POST" action="{{ url_for('toggle_role', user_id=user.id) }}" style="width: 100%;">
+                            <button type="submit" class="btn" style="background: #eab308; color: white; width: 100%;">
+                                {% if user.role == 'manager' %}Demote to Staff{% else %}Promote to Manager{% endif %}
+                            </button>
+                        </form>
+                        <!-- Delete with Confirmation -->
+                        <form method="POST" action="{{ url_for('delete_user', user_id=user.id) }}" onsubmit="return confirm('WARNING: Permanently delete this user?');" style="width: 100%;">
+                            <button type="submit" class="btn btn-logout" style="width: 100%;">Delete User</button>
+                        </form>
+                    </div>
+                    {% else %}
+                    <i style="color: #64748b;">System Administrator</i>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+
+        <!-- Floating Action Button -->
+        <button class="fab" onclick="document.getElementById('newUserForm').style.display='block'">+</button>
+
+        <!-- Hidden Create User Form (Shown when FAB clicked) -->
+        <div id="newUserForm" class="grid-card" style="display: none; position: fixed; bottom: 100px; right: 30px; width: 300px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; margin-bottom: 15px; padding-bottom: 10px;">
+                <h3 style="margin: 0; border: none; padding: 0;">Create User</h3>
+                <button onclick="document.getElementById('newUserForm').style.display='none'" style="background:none; border:none; color:#ef4444; font-weight:bold; cursor:pointer;">X</button>
+            </div>
+            <form method="POST" style="display: flex; flex-direction: column; gap: 10px;">
+                <input type="email" name="email" placeholder="Email Address" required style="padding:8px; border:1px solid #cbd5e1; border-radius:4px;">
+                <input type="password" name="password" placeholder="Temporary Password" required style="padding:8px; border:1px solid #cbd5e1; border-radius:4px;">
+                <select name="role" required style="padding:8px; border:1px solid #cbd5e1; border-radius:4px;">
+                    <option value="staff">Staff</option>
+                    <option value="manager">Manager</option>
+                </select>
+                <select name="location_id" style="padding:8px; border:1px solid #cbd5e1; border-radius:4px;">
+                    <option value="">No Location (Global)</option>
+                    {% for loc in locations %}
+                    <option value="{{ loc.id }}">{{ loc.branch_name }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-admin">Create Account</button>
+            </form>
+        </div>
+    </div>
+</main>
+
+</body>
+</html>

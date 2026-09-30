@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>TS Auto Repair</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+<div class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+<aside class="sidebar">
+    <button class="sidebar-close" onclick="toggleSidebar()">✕</button>
+    <div class="sidebar-brand">TS Auto Repair</div>
+
+    {% if current_user.role in ['super_admin', 'manager'] %}
+    <div class="location-filter">
+        <form id="locForm" method="GET">
+            <input type="hidden" name="tab" value="{{ tab }}">
+            <select name="location" onchange="document.getElementById('locForm').submit()">
+                <option value="all" {% if selected_loc == 'all' %}selected{% endif %}>All Branches</option>
+                {% for loc in locations %}
+                <option value="{{ loc.id }}" {% if selected_loc == loc.id|string %}selected{% endif %}>{{ loc.branch_name }}</option>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+    {% endif %}
+
+    <a href="{{ url_for('dashboard', tab='home', location=selected_loc) }}" class="sidebar-link {% if tab == 'home' %}active{% endif %}">Home Overview</a>
+    <a href="{{ url_for('dashboard', tab='positive', location=selected_loc) }}" class="sidebar-link {% if tab == 'positive' %}active{% endif %}">Positive Queue</a>
+    <a href="{{ url_for('dashboard', tab='mildly_negative', location=selected_loc) }}" class="sidebar-link {% if tab == 'mildly_negative' %}active{% endif %}">Mildly Negative</a>
+    <a href="{{ url_for('dashboard', tab='severely_negative', location=selected_loc) }}" class="sidebar-link {% if tab == 'severely_negative' %}active{% endif %}">Severely Negative</a>
+</aside>
+
+<main class="main-content">
+    <nav class="top-navbar">
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <!-- Updated hamburger button -->
+            <button class="hamburger" onclick="toggleSidebar()">☰</button>
+            <h2 style="margin: 0;">{{ tab|replace('_', ' ')|title }}</h2>
+        </div>
+        <div class="nav-actions">
+            {% if current_user.role == 'super_admin' %}
+                <a href="{{ url_for('admin') }}" class="btn btn-admin">Admin Terminal</a>
+            {% endif %}
+            <a href="{{ url_for('logout') }}" class="btn btn-logout">Logout ({{ current_user.email }})</a>
+        </div>
+    </nav>
+
+    <div class="content-area">
+        {% if tab == 'home' %}
+        <div class="home-grid">
+
+            <!-- Square 1: Recent Reviews -->
+            <!-- Square 1: Recent Reviews -->
+            <div class="grid-card">
+                <h3>Recent Reviews</h3>
+                <ul class="review-list">
+                {% for review in recent_reviews %}
+                    <!-- Dynamically determine the URL tab based on the sentiment class -->
+                    {% set rev_tab = 'positive' if review.sentiment_class|lower == 'positive' else ('mildly_negative' if review.sentiment_class|lower == 'mildly negative' else 'severely_negative') %}
+
+                    <a href="{{ url_for('dashboard', tab=rev_tab, location=selected_loc) }}" style="text-decoration: none; display: block; color: inherit;">
+                        <li class="review-item">
+                            <div style="font-weight: bold; margin-bottom: 5px; color: #0f172a;">{{ review.job.customer.name }}</div>
+                            <div style="color: #475569; margin-bottom: 8px; line-height: 1.4;">"{{ review.raw_text[:80] }}..."</div>
+                            <small style="color: #64748b; font-weight: 500;">
+                                Queue: <span style="color: #0f172a;">{{ review.sentiment_class|title }}</span>
+                            </small>
+                        </li>
+                    </a>
+                {% else %}
+                    <li class="review-item">No recent reviews found.</li>
+                {% endfor %}
+                </ul>
+            </div>
+            <!-- Square 2: Analytics Chart -->
+            <div class="grid-card">
+                <h3>Sentiment Analytics</h3>
+                <div class="chart-container">
+                    <canvas id="sentimentChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Square 3: Queue Statistics -->
+            <div class="grid-card">
+                <h3>Queue Volume ({{ location_name }})</h3>
+                <p><b>Positive:</b> {{ queue_stats.get('Positive', 0) }}</p>
+                <p><b>Mildly Negative:</b> {{ queue_stats.get('Mildly Negative', 0) }}</p>
+                <p><b>Severely Negative:</b> {{ queue_stats.get('Severely Negative', 0) }}</p>
+            </div>
+
+            <!-- Square 4: Quick Navigation -->
+            <div class="grid-card">
+                <h3>Manage Queues</h3>
+                <div class="queue-nav-buttons">
+                    <a href="{{ url_for('dashboard', tab='positive', location=selected_loc) }}" class="queue-btn positive">Positive Feedback</a>
+                    <a href="{{ url_for('dashboard', tab='mildly_negative', location=selected_loc) }}" class="queue-btn mildly">Mildly Negative</a>
+                    <a href="{{ url_for('dashboard', tab='severely_negative', location=selected_loc) }}" class="queue-btn severely">Severely Negative</a>
+                </div>
+            </div>
+
+        </div>
+
+        <script>
+            // Doughnut Chart Configuration
+            const ctx = document.getElementById('sentimentChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Positive', 'Mildly Negative', 'Severely Negative'],
+                    datasets: [{
+                        data: [{{ chart_data.get('Positive', 0) }}, {{ chart_data.get('Mildly Negative', 0) }}, {{ chart_data.get('Severely Negative', 0) }}],
+                        backgroundColor: ['#22c55e', '#f59e0b', '#ef4444'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'right' },
+                        tooltip: { enabled: true }
+                    }
+                }
+            });
+        </script>
+
+        {% else %}
+        <!-- Table View for Specific Queues -->
+        <!-- Table View for Specific Queues -->
+        <table>
+            <tr class="table-header">
+                <th>Customer</th>
+                <th style="width: 25%;">Original Feedback</th>
+                <th style="width: 35%;">AI Suggested Response</th>
+                <th>Score</th>
+                <th>Actions</th>
+            </tr>
+            {% for item in feedbacks %}
+            <tr>
+                <!-- Add data-label to each td like this: -->
+                <td data-label="Customer Details">
+                    <b>{{ item.job.customer.name }}</b><br>
+                    <small style="color: #64748b;">{{ item.job.customer.email }}</small><br>
+                    <small style="color: #0f172a; font-weight: 500;">{{ item.job.location.branch_name }}</small>
+                </td>
+
+                <td data-label="Original Feedback" style="line-height: 1.4; color: #334155;">
+                    {{ item.raw_text }}
+                </td>
+
+                <td data-label="AI Suggested Response">
+                    {% if item.ai_draft_response %}
+                    <div style="background: #f8fafc; padding: 12px; border-left: 3px solid #2563eb; border-radius: 4px; font-size: 14px; color: #0f172a;">
+                        <i>"{{ item.ai_draft_response }}"</i>
+                    </div>
+                    {% else %}
+                    <span style="color: #94a3b8; font-style: italic;">No draft generated.</span>
+                    {% endif %}
+                </td>
+
+                <td data-label="Sentiment Score">
+                    <span style="font-weight: bold; font-size: 16px; color: #ef4444;">{{ item.sentiment_score }}</span>
+                </td>
+
+                <td data-label="Actions">
+                    <div class="actions-form">
+                        <form method="POST" action="{{ url_for('change_queue', feedback_id=item.id) }}" onsubmit="return confirm('Are you sure you want to move this to a different queue?');">
+                            <select name="new_queue" onchange="this.form.submit()" style="width:100%; padding: 6px; border: 1px solid #cbd5e1; border-radius: 4px;">
+                                <option value="">Move to...</option>
+                                <option value="Positive">Positive</option>
+                                <option value="Mildly Negative">Mildly Negative</option>
+                                <option value="Severely Negative">Severely Negative</option>
+                            </select>
+                        </form>
+                        <form method="POST" action="{{ url_for('resolve_feedback', feedback_id=item.id) }}" onsubmit="return confirm('Mark this feedback as completely resolved?');">
+                            <button type="submit" class="btn btn-resolve" style="width: 100%; margin-top: 8px;">Mark Resolved</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="table-header" style="text-align: center; padding: 20px; color: #64748b;">No unresolved feedback in this queue.</td></tr>
+            {% endfor %}
+        </table>
+        {% endif %}
+    </div>
+</main>
+<!-- Load the Pusher library first -->
+    <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
+
+    <!-- Your combined custom scripts -->
+    <script>
+        // --- Sidebar Toggle Logic ---
+        function toggleSidebar() {
+            document.querySelector('.sidebar').classList.toggle('active');
+            document.querySelector('.sidebar-overlay').classList.toggle('active');
+        }
+
+        // --- Real-time Pusher Logic ---
+        const pusher = new Pusher('{{ pusher_key }}', {
+            cluster: '{{ pusher_cluster }}'
+        });
+
+        const channel = pusher.subscribe('dashboard-channel');
+
+        channel.bind('data-updated', function(data) {
+            window.location.reload();
+        });
+    </script>
+
+</body>
+</html>
