@@ -142,7 +142,8 @@ def dashboard():
 
         return render_template('dashboard.html', tab=tab, recent_reviews=recent_reviews,
                                chart_data=chart_data, queue_stats=queue_stats,
-                               locations=locations, selected_loc=selected_loc, location_name=location_name)
+                               locations=locations, selected_loc=selected_loc, location_name=location_name,
+                               pusher_key = os.environ.get('PUSHER_KEY'), pusher_cluster = os.environ.get('PUSHER_CLUSTER'))
     else:
         # Map the URL tab parameter to the exact n8n database strings
         queue_mapping = {
@@ -155,7 +156,8 @@ def dashboard():
 
         feedbacks = query.filter(Feedback.routing_queue == target_queue, Feedback.is_resolved == False).all()
         return render_template('dashboard.html', tab=tab, feedbacks=feedbacks,
-                               locations=locations, selected_loc=selected_loc, location_name=location_name)
+                               locations=locations, selected_loc=selected_loc, location_name=location_name,
+                               pusher_key = os.environ.get('PUSHER_KEY'), pusher_cluster = os.environ.get('PUSHER_CLUSTER'))
 
 @app.route('/action/resolve/<uuid:feedback_id>', methods=['POST'])
 @login_required
