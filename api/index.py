@@ -227,7 +227,7 @@ def delete_user(user_id):
 @app.route('/api/webhook/notify', methods=['POST'])
 def notify_dashboard():
     client_key = request.headers.get('x-key')
-    server_secret = os.environ.get('WEBHOOK_SECRET')
+    server_secret = os.environ.get('N8N_WEBHOOK_SECRET')
 
     # 1. Authorise (and prevent the None == None trap)
     if not server_secret or client_key != server_secret:
