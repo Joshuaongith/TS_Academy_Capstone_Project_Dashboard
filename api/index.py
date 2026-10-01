@@ -224,10 +224,15 @@ def delete_user(user_id):
     return redirect(url_for('admin'))
 
 @app.route('/api/webhook/notify', methods=['POST'])
+@app.route('/api/webhook/notify', methods=['POST'])
 def notify_dashboard():
-    # 1. Authorise using the specific header name set in n8n (x-key)
-    if request.headers.get('x-key') != os.environ.get('WEBHOOK_SECRET'):
-        print(request.headers.get('x-key'))
+    client_key = request.headers.get('x-key')
+    server_secret = os.environ.get('WEBHOOK_SECRET')
+
+    # 1. Authorise (and prevent the None == None trap)
+    if not server_secret or client_key != server_secret:
+        # Force flush ensures the print statement always hits the Vercel logs immediately
+        print(f"Auth Failed! Client sent: {client_key} | Server expected: {server_secret}", flush=True)
         return jsonify({"error": "Unauthorised access"}), 401
 
     # 2. Trigger the Pusher event
