@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TS Auto Repair</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}">
@@ -34,14 +35,14 @@
     <a href="{{ url_for('dashboard', tab='private_queue', location=selected_loc) }}" class="sidebar-link {% if tab == 'private_queue' %}active{% endif %}">Private Queue</a>
     <a href="{{ url_for('dashboard', tab='escalated', location=selected_loc) }}" class="sidebar-link {% if tab == 'escalated' %}active{% endif %}">Escalate to Manager</a>
     <a href="{{ url_for('dashboard', tab='human_intervention', location=selected_loc) }}" class="sidebar-link {% if tab == 'human_intervention' %}active{% endif %}">Human Intervention</a>
+    <a href="{{ url_for('dashboard', tab='addressed', location=selected_loc) }}" class="sidebar-link {% if tab == 'addressed' %}active{% endif %}">Addressed Feedback</a>
 </aside>
 
 <main class="main-content">
     <nav class="top-navbar">
-        <div style="display: flex; align-items: center; gap: 15px;">
-            <!-- Updated hamburger button -->
+        <div>
             <button class="hamburger" onclick="toggleSidebar()">☰</button>
-            <h2 style="margin: 0;">{{ tab|replace('_', ' ')|title }}</h2>
+            <h2>{{ tab|replace('_', ' ')|title }}</h2>
         </div>
         <div class="nav-actions">
             {% if current_user.role == 'super_admin' %}
@@ -55,19 +56,18 @@
         {% if tab == 'home' %}
         <div class="home-grid">
 
-           <!-- Square 1: Recent Reviews -->
+            <!-- TOP LEFT: Recent Reviews -->
             <div class="grid-card">
                 <h3>Recent Reviews</h3>
                 <ul class="review-list">
                 {% for review in recent_reviews %}
                     {% set rev_tab = 'ready_to_publish' if review.routing_queue == 'Ready to Publish' else ('private_queue' if review.routing_queue == 'Private Queue' else ('escalated' if review.routing_queue == 'Escalate to Manager' else 'human_intervention')) %}
-
-                    <a href="{{ url_for('dashboard', tab=rev_tab, location=selected_loc) }}" style="text-decoration: none; display: block; color: inherit;">
+                    <a href="{{ url_for('dashboard', tab=rev_tab, location=selected_loc) }}">
                         <li class="review-item">
-                            <div style="font-weight: bold; margin-bottom: 5px; color: #0f172a;">{{ review.job.customer.name }}</div>
-                            <div style="color: #475569; margin-bottom: 8px; line-height: 1.4;">"{{ review.raw_text[:80] }}..."</div>
-                            <small style="color: #64748b; font-weight: 500;">
-                                Queue: <span style="color: #0f172a;">{{ review.routing_queue }}</span>
+                            <div>{{ review.job.customer.name }}</div>
+                            <div>"{{ review.raw_text[:80] }}..."</div>
+                            <small>
+                                Queue: <span>{{ review.routing_queue }}</span>
                             </small>
                         </li>
                     </a>
@@ -76,37 +76,102 @@
                 {% endfor %}
                 </ul>
             </div>
-            <!-- Square 2: Analytics Chart -->
+
+            <!-- TOP RIGHT: Analytics Chart -->
             <div class="grid-card">
                 <h3>Sentiment Analytics</h3>
-                <div class="chart-container">
-                    <canvas id="sentimentChart"></canvas>
+
+                {% set pos_count = chart_data.get('Positive', 0) %}
+                {% set neu_count = chart_data.get('Mildly Negative', 0) %}
+                {% set neg_count = chart_data.get('Severely Negative', 0) %}
+                {% set total = pos_count + neu_count + neg_count %}
+
+                {% set pos_pct = (pos_count / total * 100)|round|int if total > 0 else 0 %}
+                {% set neu_pct = (neu_count / total * 100)|round|int if total > 0 else 0 %}
+                {% set neg_pct = (neg_count / total * 100)|round|int if total > 0 else 0 %}
+
+                <div class="analytics-wrapper">
+                    <div class="chart-container">
+                        <canvas id="sentimentChart"></canvas>
+                    </div>
+
+                    <div class="custom-legend">
+                        <div class="legend-row">
+                            <div class="legend-label"><span>Positive</span> <span>{{ pos_count }}</span></div>
+                            <div class="legend-bar-bg">
+                                <div class="legend-bar-fill" style="width: {{ pos_pct }}%; background: #22c55e;">
+                                    {% if pos_pct > 0 %}{{ pos_pct }}%{% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="legend-row">
+                            <div class="legend-label"><span>Mildly Negative</span> <span>{{ neu_count }}</span></div>
+                            <div class="legend-bar-bg">
+                                <div class="legend-bar-fill" style="width: {{ neu_pct }}%; background: #f59e0b;">
+                                    {% if neu_pct > 0 %}{{ neu_pct }}%{% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="legend-row">
+                            <div class="legend-label"><span>Severely Negative</span> <span>{{ neg_count }}</span></div>
+                            <div class="legend-bar-bg">
+                                <div class="legend-bar-fill" style="width: {{ neg_pct }}%; background: #ef4444;">
+                                    {% if neg_pct > 0 %}{{ neg_pct }}%{% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <!-- Square 3: Queue Statistics -->
+            <!-- BOTTOM LEFT: Queue Statistics -->
             <div class="grid-card">
                 <h3>Queue Volume ({{ location_name }})</h3>
-                <p><b>Ready to Publish:</b> {{ queue_stats.get('Ready to Publish', 0) }}</p>
-                <p><b>Private Queue:</b> {{ queue_stats.get('Private Queue', 0) }}</p>
-                <p><b>Escalate to Manager:</b> {{ queue_stats.get('Escalate to Manager', 0) }}</p>
-                <p><b>Human Intervention:</b> {{ queue_stats.get('Human Intervention', 0) }}</p>
+                <div class="queue-volume-container">
+                    <div class="volume-box">
+                        <strong>Ready to Publish:</strong>
+                        <span>{{ queue_stats.get('Ready to Publish', 0) }}</span>
+                    </div>
+                    <div class="volume-box">
+                        <strong>Private Queue:</strong>
+                        <span>{{ queue_stats.get('Private Queue', 0) }}</span>
+                    </div>
+                    <div class="volume-box">
+                        <strong>Escalate to Manager:</strong>
+                        <span>{{ queue_stats.get('Escalate to Manager', 0) }}</span>
+                    </div>
+                    <div class="volume-box">
+                        <strong>Human Intervention:</strong>
+                        <span>{{ queue_stats.get('Human Intervention', 0) }}</span>
+                    </div>
+
+                    <div class="volume-box addressed">
+                        <div>
+                            <strong>Addressed:</strong> {{ queue_stats.get('Addressed', 0) }}
+                            <span>|</span>
+                            <strong>Total Feedback:</strong> {{ queue_stats.get('Total Feedback', 0) }}
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            <!-- Square 4: Quick Navigation -->
+            <!-- BOTTOM RIGHT: Quick Navigation -->
             <div class="grid-card">
                 <h3>Manage Queues</h3>
                 <div class="queue-nav-buttons">
-                    <a href="{{ url_for('dashboard', tab='ready_to_publish', location=selected_loc) }}" class="queue-btn" style="background: #22c55e;">Ready to Publish</a>
-                    <a href="{{ url_for('dashboard', tab='private_queue', location=selected_loc) }}" class="queue-btn" style="background: #f59e0b;">Private Queue</a>
-                    <a href="{{ url_for('dashboard', tab='escalated', location=selected_loc) }}" class="queue-btn" style="background: #ef4444;">Escalate to Manager</a>
-                    <a href="{{ url_for('dashboard', tab='human_intervention', location=selected_loc) }}" class="queue-btn" style="background: #64748b;">Human Intervention</a>
+                    <a href="{{ url_for('dashboard', tab='ready_to_publish', location=selected_loc) }}" class="queue-btn" style="background: #22c55e; color: white;">Ready to Publish</a>
+                    <a href="{{ url_for('dashboard', tab='private_queue', location=selected_loc) }}" class="queue-btn" style="background: #f59e0b; color: white;">Private Queue</a>
+                    <a href="{{ url_for('dashboard', tab='escalated', location=selected_loc) }}" class="queue-btn" style="background: #ef4444; color: white;">Escalate to Manager</a>
+                    <a href="{{ url_for('dashboard', tab='human_intervention', location=selected_loc) }}" class="queue-btn" style="background: #64748b; color: white;">Human Intervention</a>
+                    <a href="{{ url_for('dashboard', tab='addressed', location=selected_loc) }}" class="queue-btn" style="background: #334155; color: white;">Addressed Feedback</a>
                 </div>
             </div>
+
         </div>
 
         <script>
-            // Doughnut Chart Configuration
             const ctx = document.getElementById('sentimentChart').getContext('2d');
             new Chart(ctx, {
                 type: 'doughnut',
@@ -115,14 +180,15 @@
                     datasets: [{
                         data: [{{ chart_data.get('Positive', 0) }}, {{ chart_data.get('Mildly Negative', 0) }}, {{ chart_data.get('Severely Negative', 0) }}],
                         backgroundColor: ['#22c55e', '#f59e0b', '#ef4444'],
-                        borderWidth: 0
+                        borderWidth: 0,
+                        hoverOffset: 4
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { position: 'right' },
+                        legend: { display: false },
                         tooltip: { enabled: true }
                     }
                 }
@@ -130,7 +196,24 @@
         </script>
 
         {% else %}
-        <!-- Table View for Specific Queues -->
+
+        {% if tab == 'addressed' %}
+        <div class="queue-filter-bar">
+            <span>Filter by Origin Queue:</span>
+            <form id="queueFilterForm" method="GET">
+                <input type="hidden" name="tab" value="{{ tab }}">
+                <input type="hidden" name="location" value="{{ selected_loc }}">
+                <select name="queue_type" onchange="document.getElementById('queueFilterForm').submit()">
+                    <option value="all" {% if queue_type == 'all' %}selected{% endif %}>All Addressed Feedback</option>
+                    <option value="Ready to Publish" {% if queue_type == 'Ready to Publish' %}selected{% endif %}>Ready to Publish</option>
+                    <option value="Private Queue" {% if queue_type == 'Private Queue' %}selected{% endif %}>Private Queue</option>
+                    <option value="Escalate to Manager" {% if queue_type == 'Escalate to Manager' %}selected{% endif %}>Escalate to Manager</option>
+                    <option value="Human Intervention" {% if queue_type == 'Human Intervention' %}selected{% endif %}>Human Intervention</option>
+                </select>
+            </form>
+        </div>
+        {% endif %}
+
         <table>
             <tr class="table-header">
                 <th>Customer</th>
@@ -141,83 +224,77 @@
             </tr>
             {% for item in feedbacks %}
             <tr>
-                <!-- Add data-label to each td like this: -->
                 <td data-label="Customer Details">
                     <b>{{ item.job.customer.name }}</b><br>
                     <small style="color: #64748b;">{{ item.job.customer.email }}</small><br>
                     <small style="color: #0f172a; font-weight: 500;">{{ item.job.location.branch_name }}</small>
                 </td>
-                <td data-label="Original Feedback" style="line-height: 1.4; color: #334155;">
+                <td data-label="Original Feedback">
                     {{ item.raw_text }}
-
-                    <!-- Dynamic Visual Sentiment Badge -->
                     <div style="margin-top: 10px;">
                         {% set badge_color = '#22c55e' if item.sentiment_class|lower == 'positive' else ('#f59e0b' if item.sentiment_class|lower == 'mildly negative' else ('#ef4444' if 'sever' in item.sentiment_class|lower else '#64748b')) %}
-                        <span style="display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: bold; color: white; background-color: {{ badge_color }};">
+                        <span class="sentiment-badge" style="background-color: {{ badge_color }};">
                             Detected: {{ item.sentiment_class|title }}
                         </span>
                     </div>
                 </td>
-
                 <td data-label="AI Suggested Response">
                     {% if item.ai_draft_response %}
-                    <div style="background: #f8fafc; padding: 12px; border-left: 3px solid #2563eb; border-radius: 4px; font-size: 14px; color: #0f172a;">
-                        <i>"{{ item.ai_draft_response }}"</i>
+                    <div class="ai-draft-box">
+                        {{ item.ai_draft_response }}
                     </div>
                     {% else %}
-                    <span style="color: #94a3b8; font-style: italic;">No draft generated.</span>
+                    <span class="no-draft-text">No draft generated.</span>
                     {% endif %}
                 </td>
-
                 <td data-label="Sentiment Score">
-                    <span style="font-weight: bold; font-size: 16px; color: #ef4444;">{{ item.sentiment_score }}</span>
+                    <span class="sentiment-score">{{ item.sentiment_score }}</span>
                 </td>
-
                 <td data-label="Actions">
-                    <div class="actions-form">
-                        <form method="POST" action="{{ url_for('change_queue', feedback_id=item.id) }}" onsubmit="return confirm('Are you sure you want to move this to a different queue?');">
-                            <select name="new_queue" onchange="this.form.submit()" style="width:100%; padding: 6px; border: 1px solid #cbd5e1; border-radius: 4px;">
-                                <option value="">Move to...</option>
-                                <option value="Ready to Publish">Ready to Publish</option>
-                                <option value="Private Queue">Private Queue</option>
-                                <option value="Escalate to Manager">Escalate to Manager</option>
-                                <option value="Human Intervention">Human Intervention</option>
-                            </select>
-                        </form>
-                        <form method="POST" action="{{ url_for('resolve_feedback', feedback_id=item.id) }}" onsubmit="return confirm('Mark this feedback as completely resolved?');">
-                            <button type="submit" class="btn btn-resolve" style="width: 100%; margin-top: 8px;">Mark Resolved</button>
-                        </form>
-                    </div>
+                    {% if item.is_resolved %}
+                        <div class="actions-resolved">
+                            <span class="resolved-badge">
+                                Closed
+                            </span>
+                        </div>
+                    {% else %}
+                        <div class="actions-form">
+                            <form method="POST" action="{{ url_for('change_queue', feedback_id=item.id) }}" onsubmit="return confirm('Are you sure you want to move this to a different queue?');">
+                                <select name="new_queue" onchange="this.form.submit()">
+                                    <option value="">Move to...</option>
+                                    <option value="Ready to Publish">Ready to Publish</option>
+                                    <option value="Private Queue">Private Queue</option>
+                                    <option value="Escalate to Manager">Escalate to Manager</option>
+                                    <option value="Human Intervention">Human Intervention</option>
+                                </select>
+                            </form>
+                            <form method="POST" action="{{ url_for('resolve_feedback', feedback_id=item.id) }}" onsubmit="return confirm('Mark this feedback as completely resolved?');">
+                                <button type="submit" class="btn btn-resolve">Mark Resolved</button>
+                            </form>
+                        </div>
+                    {% endif %}
                 </td>
             </tr>
             {% else %}
-            <tr><td colspan="5" class="table-header" style="text-align: center; padding: 20px; color: #64748b;">No unresolved feedback in this queue.</td></tr>
+            <tr><td colspan="5" class="table-header" style="text-align: center; padding: 20px; color: #64748b;">No feedback found in this queue.</td></tr>
             {% endfor %}
         </table>
         {% endif %}
     </div>
 </main>
-<!-- Load the Pusher library first -->
-    <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
-
-    <script>
-        // --- Sidebar Toggle Logic ---
-        function toggleSidebar() {
-            document.querySelector('.sidebar').classList.toggle('active');
-            document.querySelector('.sidebar-overlay').classList.toggle('active');
-        }
-
-        // --- Real-time Pusher Logic ---
-        const pusher = new Pusher('{{ pusher_key }}', {
-            cluster: '{{ pusher_cluster }}'
-        });
-
-        const channel = pusher.subscribe('dashboard-channel');
-
-        channel.bind('data-updated', function(data) {
-            window.location.reload();
-        });
-    </script>
-
+<script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
+<script>
+    function toggleSidebar() {
+        document.querySelector('.sidebar').classList.toggle('active');
+        document.querySelector('.sidebar-overlay').classList.toggle('active');
+    }
+    const pusher = new Pusher('{{ pusher_key }}', {
+        cluster: '{{ pusher_cluster }}'
+    });
+    const channel = pusher.subscribe('dashboard-channel');
+    channel.bind('data-updated', function(data) {
+        window.location.reload();
+    });
+</script>
 </body>
 </html>

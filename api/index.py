@@ -99,11 +99,13 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
+
 @app.route('/')
 @login_required
 def dashboard():
     tab = request.args.get('tab', 'home')
     selected_loc = request.args.get('location', 'all')
+    queue_type = request.args.get('queue_type', 'all')  # New parameter for the Addressed filter
 
     query = Feedback.query
     location_name = "All Branches"
@@ -122,28 +124,51 @@ def dashboard():
     locations = Location.query.all() if current_user.role in ['super_admin', 'manager'] else []
 
     if tab == 'home':
-        recent_reviews = query.order_by(Feedback.created_at.desc()).limit(5).all()
+        recent_reviews = query.order_by(Feedback.created_at.desc()).limit(3).all()
         all_feedback = query.all()
 
-        # Analytics remains tied to sentiment for the pie chart
+        # Doughnut Chart: Explicitly exclude Human Intervention items
         chart_data = {
-            'Positive': sum(1 for f in all_feedback if f.sentiment_class and f.sentiment_class.lower() == 'positive'),
-            'Mildly Negative': sum(1 for f in all_feedback if f.sentiment_class and f.sentiment_class.lower() == 'mildly negative'),
-            'Severely Negative': sum(1 for f in all_feedback if f.sentiment_class and f.sentiment_class.lower() in ['severely negative', 'severly negative'])
+            'Positive': sum(1 for f in all_feedback if
+                            f.sentiment_class and f.sentiment_class.lower() == 'positive' and f.routing_queue != 'Human Intervention'),
+            'Mildly Negative': sum(1 for f in all_feedback if
+                                   f.sentiment_class and f.sentiment_class.lower() == 'mildly negative' and f.routing_queue != 'Human Intervention'),
+            'Severely Negative': sum(1 for f in all_feedback if
+                                     f.sentiment_class and f.sentiment_class.lower() in ['severely negative',
+                                                                                         'severly negative'] and f.routing_queue != 'Human Intervention')
         }
 
-        # Queues are now strictly tied to the routing_queue field and exclude resolved items
+        # Queues: Added 'Addressed' and 'Total Feedback'
         queue_stats = {
-            'Ready to Publish': sum(1 for f in all_feedback if f.routing_queue == 'Ready to Publish' and not f.is_resolved),
+            'Ready to Publish': sum(
+                1 for f in all_feedback if f.routing_queue == 'Ready to Publish' and not f.is_resolved),
             'Private Queue': sum(1 for f in all_feedback if f.routing_queue == 'Private Queue' and not f.is_resolved),
-            'Escalate to Manager': sum(1 for f in all_feedback if f.routing_queue == 'Escalate to Manager' and not f.is_resolved),
-            'Human Intervention': sum(1 for f in all_feedback if f.routing_queue == 'Human Intervention' and not f.is_resolved)
+            'Escalate to Manager': sum(
+                1 for f in all_feedback if f.routing_queue == 'Escalate to Manager' and not f.is_resolved),
+            'Human Intervention': sum(
+                1 for f in all_feedback if f.routing_queue == 'Human Intervention' and not f.is_resolved),
+            'Addressed': sum(1 for f in all_feedback if f.is_resolved),
+            'Total Feedback': len(all_feedback)
         }
 
         return render_template('dashboard.html', tab=tab, recent_reviews=recent_reviews,
                                chart_data=chart_data, queue_stats=queue_stats,
                                locations=locations, selected_loc=selected_loc, location_name=location_name,
-                               pusher_key = os.environ.get('PUSHER_KEY'), pusher_cluster = os.environ.get('PUSHER_CLUSTER'))
+                               pusher_key=os.environ.get('PUSHER_KEY'), pusher_cluster=os.environ.get('PUSHER_CLUSTER'))
+
+    elif tab == 'addressed':
+        # Base query for all resolved items
+        base_query = query.filter(Feedback.is_resolved == True)
+
+        # Apply secondary queue filter if one is selected
+        if queue_type != 'all':
+            base_query = base_query.filter(Feedback.routing_queue == queue_type)
+
+        feedbacks = base_query.order_by(Feedback.created_at.desc()).all()
+        return render_template('dashboard.html', tab=tab, feedbacks=feedbacks, queue_type=queue_type,
+                               locations=locations, selected_loc=selected_loc, location_name=location_name,
+                               pusher_key=os.environ.get('PUSHER_KEY'), pusher_cluster=os.environ.get('PUSHER_CLUSTER'))
+
     else:
         # Map the URL tab parameter to the exact n8n database strings
         queue_mapping = {
@@ -157,7 +182,7 @@ def dashboard():
         feedbacks = query.filter(Feedback.routing_queue == target_queue, Feedback.is_resolved == False).all()
         return render_template('dashboard.html', tab=tab, feedbacks=feedbacks,
                                locations=locations, selected_loc=selected_loc, location_name=location_name,
-                               pusher_key = os.environ.get('PUSHER_KEY'), pusher_cluster = os.environ.get('PUSHER_CLUSTER'))
+                               pusher_key=os.environ.get('PUSHER_KEY'), pusher_cluster=os.environ.get('PUSHER_CLUSTER'))
 
 @app.route('/action/resolve/<uuid:feedback_id>', methods=['POST'])
 @login_required
