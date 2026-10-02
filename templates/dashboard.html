@@ -31,11 +31,19 @@
     {% endif %}
 
     <a href="{{ url_for('dashboard', tab='home', location=selected_loc) }}" class="sidebar-link {% if tab == 'home' %}active{% endif %}">Home Overview</a>
+    <br>
+    <a href="{{ url_for('dashboard', tab='all_feedback', location=selected_loc) }}" class="sidebar-link {% if tab == 'all_feedback' %}active{% endif %}">All Feedback</a>
+    <a href="{{ url_for('dashboard', tab='addressed', location=selected_loc) }}" class="sidebar-link {% if tab == 'addressed' %}active{% endif %}">Addressed Feedback</a>
+    <br>
     <a href="{{ url_for('dashboard', tab='ready_to_publish', location=selected_loc) }}" class="sidebar-link {% if tab == 'ready_to_publish' %}active{% endif %}">Ready to Publish</a>
     <a href="{{ url_for('dashboard', tab='private_queue', location=selected_loc) }}" class="sidebar-link {% if tab == 'private_queue' %}active{% endif %}">Private Queue</a>
     <a href="{{ url_for('dashboard', tab='escalated', location=selected_loc) }}" class="sidebar-link {% if tab == 'escalated' %}active{% endif %}">Escalate to Manager</a>
     <a href="{{ url_for('dashboard', tab='human_intervention', location=selected_loc) }}" class="sidebar-link {% if tab == 'human_intervention' %}active{% endif %}">Human Intervention</a>
-    <a href="{{ url_for('dashboard', tab='addressed', location=selected_loc) }}" class="sidebar-link {% if tab == 'addressed' %}active{% endif %}">Addressed Feedback</a>
+
+    <div class="sidebar-profile">
+        <div class="profile-email">{{ current_user.email }}</div>
+        <div class="profile-role">{{ current_user.role|replace('_', ' ') }}</div>
+    </div>
 </aside>
 
 <main class="main-content">
@@ -46,9 +54,9 @@
         </div>
         <div class="nav-actions">
             {% if current_user.role == 'super_admin' %}
-                <a href="{{ url_for('admin') }}" class="btn btn-admin">Admin Terminal</a>
+                <a href="{{ url_for('admin') }}" class="btn btn-admin">Add User</a>
             {% endif %}
-            <a href="{{ url_for('logout') }}" class="btn btn-logout">Logout ({{ current_user.email }})</a>
+            <a href="{{ url_for('logout') }}" class="btn btn-logout">Logout</a>
         </div>
     </nav>
 
@@ -56,9 +64,12 @@
         {% if tab == 'home' %}
         <div class="home-grid">
 
-            <!-- TOP LEFT: Recent Reviews -->
+            <!-- TOP LEFT: Recent Reviews with inline 'All Feedback' button -->
             <div class="grid-card">
-                <h3>Recent Reviews</h3>
+                <div class="card-header">
+                    <h3>Recent Reviews</h3>
+                    <a href="{{ url_for('dashboard', tab='all_feedback', location=selected_loc) }}" class="card-header-action">All Feedback</a>
+                </div>
                 <ul class="review-list">
                 {% for review in recent_reviews %}
                     {% set rev_tab = 'ready_to_publish' if review.routing_queue == 'Ready to Publish' else ('private_queue' if review.routing_queue == 'Private Queue' else ('escalated' if review.routing_queue == 'Escalate to Manager' else 'human_intervention')) %}
@@ -212,6 +223,7 @@
                 </select>
             </form>
         </div>
+        
         {% endif %}
 
         <table>
@@ -229,9 +241,9 @@
                     <small style="color: #64748b;">{{ item.job.customer.email }}</small><br>
                     <small style="color: #0f172a; font-weight: 500;">{{ item.job.location.branch_name }}</small>
                 </td>
-                <td data-label="Original Feedback">
+                <td data-label="Original Feedback" class="table-cell-feedback">
                     {{ item.raw_text }}
-                    <div style="margin-top: 10px;">
+                    <div class="table-cell-feedback-margin">
                         {% set badge_color = '#22c55e' if item.sentiment_class|lower == 'positive' else ('#f59e0b' if item.sentiment_class|lower == 'mildly negative' else ('#ef4444' if 'sever' in item.sentiment_class|lower else '#64748b')) %}
                         <span class="sentiment-badge" style="background-color: {{ badge_color }};">
                             Detected: {{ item.sentiment_class|title }}
@@ -251,27 +263,39 @@
                     <span class="sentiment-score">{{ item.sentiment_score }}</span>
                 </td>
                 <td data-label="Actions">
-                    {% if item.is_resolved %}
-                        <div class="actions-resolved">
-                            <span class="resolved-badge">
-                                Closed
-                            </span>
+                    {% if tab == 'all_feedback' %}
+                        <div class="table-cell-all-feedback">
+                            <div class="table-cell-all-feedback-label">Current Queue</div>
+                            <div class="table-cell-all-feedback-value">{{ item.routing_queue }}</div>
                         </div>
+                        {% if item.is_resolved %}
+                            <div class="table-cell-all-feedback-status closed">✓ Closed</div>
+                        {% else %}
+                            <div class="table-cell-all-feedback-status pending">⏳ Pending</div>
+                        {% endif %}
                     {% else %}
-                        <div class="actions-form">
-                            <form method="POST" action="{{ url_for('change_queue', feedback_id=item.id) }}" onsubmit="return confirm('Are you sure you want to move this to a different queue?');">
-                                <select name="new_queue" onchange="this.form.submit()">
-                                    <option value="">Move to...</option>
-                                    <option value="Ready to Publish">Ready to Publish</option>
-                                    <option value="Private Queue">Private Queue</option>
-                                    <option value="Escalate to Manager">Escalate to Manager</option>
-                                    <option value="Human Intervention">Human Intervention</option>
-                                </select>
-                            </form>
-                            <form method="POST" action="{{ url_for('resolve_feedback', feedback_id=item.id) }}" onsubmit="return confirm('Mark this feedback as completely resolved?');">
-                                <button type="submit" class="btn btn-resolve">Mark Resolved</button>
-                            </form>
-                        </div>
+                        {% if item.is_resolved %}
+                            <div class="actions-resolved">
+                                <span class="resolved-badge">
+                                    Closed
+                                </span>
+                            </div>
+                        {% else %}
+                            <div class="actions-form">
+                                <form method="POST" action="{{ url_for('change_queue', feedback_id=item.id) }}" onsubmit="return confirm('Are you sure you want to move this to a different queue?');">
+                                    <select name="new_queue" onchange="this.form.submit()">
+                                        <option value="">Move to...</option>
+                                        <option value="Ready to Publish">Ready to Publish</option>
+                                        <option value="Private Queue">Private Queue</option>
+                                        <option value="Escalate to Manager">Escalate to Manager</option>
+                                        <option value="Human Intervention">Human Intervention</option>
+                                    </select>
+                                </form>
+                                <form method="POST" action="{{ url_for('resolve_feedback', feedback_id=item.id) }}" onsubmit="return confirm('Mark this feedback as completely resolved?');">
+                                    <button type="submit" class="btn btn-resolve">Mark Resolved</button>
+                                </form>
+                            </div>
+                        {% endif %}
                     {% endif %}
                 </td>
             </tr>

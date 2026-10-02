@@ -169,6 +169,13 @@ def dashboard():
                                locations=locations, selected_loc=selected_loc, location_name=location_name,
                                pusher_key=os.environ.get('PUSHER_KEY'), pusher_cluster=os.environ.get('PUSHER_CLUSTER'))
 
+    elif tab == 'all_feedback':
+        # Fetch absolutely everything for the master log
+        feedbacks = query.order_by(Feedback.created_at.desc()).all()
+        return render_template('dashboard.html', tab=tab, feedbacks=feedbacks,
+                               locations=locations, selected_loc=selected_loc, location_name=location_name,
+                               pusher_key=os.environ.get('PUSHER_KEY'), pusher_cluster=os.environ.get('PUSHER_CLUSTER'))
+
     else:
         # Map the URL tab parameter to the exact n8n database strings
         queue_mapping = {
